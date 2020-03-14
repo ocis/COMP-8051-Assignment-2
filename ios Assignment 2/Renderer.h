@@ -13,6 +13,7 @@
     @public float viewRotateX, viewRotateY, viewRotateZ;
     @public float minimapViewRotateX, minimapViewRotateY, minimapViewRotateZ;
     @public float minimapTranslateX, minimapTranslateY, minimapTranslateZ;
+    @public bool enableMap;
 }
 
 // Properties to interface with iOS UI code
@@ -21,7 +22,8 @@
 
 - (void)setup:(GLKView *)view;      // Set up GL using the current View
 - (void)loadModels;// Load models (e.g., cube to rotate)
-- (void)loadWallModel;
+- (void)loadWallModel; // Loads wall
+- (void)loadMarkerModel; //Loads marker
 - (void)initMaze;
 - (void)update;                     // Update GL
 - (void)draw:(CGRect)drawRect;      // Make the GL draw calls

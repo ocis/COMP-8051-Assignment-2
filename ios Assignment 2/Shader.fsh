@@ -41,6 +41,6 @@ void main()
 
     // ### Modify this next line to modulate texture with calculated phong shader values
     fragColor = texture(texSampler, texCoordOut);
-    fragColor.a = 1.0;
+    fragColor.a = 0.5;
 
 }

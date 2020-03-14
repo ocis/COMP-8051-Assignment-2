@@ -19,6 +19,8 @@ public:
 
     int GenWall(float scale, GLfloat **vertices, GLfloat **normals,
                 GLfloat **texCoords, GLuint ** indices, int *numVerts);
+    int GenMarker(float scale, GLfloat **vertices, GLfloat **normals,
+                GLfloat **texCoords, GLuint ** indices, int *numVerts);
     int GenCube(float scale, GLfloat **vertices, GLfloat **normals,
                 GLfloat **texCoords, GLuint ** indices, int *numVerts);
     int GenSphere(int numSlices, float radius, GLfloat **vertices, GLfloat **normals,

@@ -478,6 +478,67 @@ int GLESRenderer::GenWall(float scale, GLfloat **vertices, GLfloat **normals, GL
     return numIndices;
 }
 
+int GLESRenderer::GenMarker(float scale, GLfloat **vertices, GLfloat **normals, GLfloat **texCoords, GLuint **indices, int *numVerts){
+    int i;
+    int numVertices = 3;
+    int numIndices = 3;
+    
+    GLfloat markerVerts[] =
+    {
+        -0.5f, -0.5f, 0.0f,
+        0.0f, 0.5f, 0.0f,
+        0.5f, -0.5f, 0.0f
+    };
+    
+    GLfloat markerNorms[] =
+    {
+        0.0f, 0.0f, -1.0f,
+        0.0f, 0.0f, 1.0f
+    };
+    
+    GLfloat markerTex[] =
+    {
+        0.0f, 0.0f,
+        0.5f, 1.0f,
+        1.0f, 1.0f,
+    };
+    
+    if (vertices != NULL)
+    {
+        *vertices = (GLfloat *)malloc (sizeof(GLfloat) * 3 * numVertices);
+        memcpy(*vertices, markerVerts, sizeof(markerVerts));
+        
+        for(i = 0; i < numVertices * 3; i++)
+        {
+            (*vertices)[i] *= scale;
+        }
+    }
+    
+    if (normals != NULL)
+    {
+        *normals = (GLfloat *)malloc (sizeof(GLfloat) * 3 * numVertices);
+        memcpy(*normals, markerNorms,   sizeof(markerNorms));
+    }
+    
+    if(texCoords != NULL){
+        *texCoords = (GLfloat *)malloc(sizeof(GLfloat) * 2 * numVertices);
+        memcpy(*texCoords, markerTex, sizeof(markerTex));
+    }
+    
+    if(indices != NULL){
+        GLuint markerIndices[] =
+        {
+            0, 2, 1,
+        };
+        *indices = (GLuint *)malloc(sizeof(GLuint) * numIndices);
+        memcpy(*indices, markerIndices, sizeof(markerIndices));
+    }
+    
+    if(numVerts != NULL)
+        *numVerts = numVertices;
+    return numIndices;
+}
+
 // Generate vertices, normals, texture coordinates and indices for sphere
 //      Adapted from Dan Ginsburg, Budirijanto Purnomo from the book
 //      OpenGL(R) ES 2.0 Programming Guide

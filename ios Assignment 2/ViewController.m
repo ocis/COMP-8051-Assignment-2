@@ -23,6 +23,7 @@
     [renderer setup:view];
     [renderer loadModels];
     [renderer loadWallModel];
+    [renderer loadMarkerModel];
     
     [renderer initMaze];
     
@@ -38,6 +39,11 @@
     resetRecognizer.numberOfTouchesRequired = 1;
     resetRecognizer.numberOfTapsRequired = 2;
     [self.view addGestureRecognizer:resetRecognizer];
+    
+    UITapGestureRecognizer *mapRecognizer = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(doubleTapForMap:)];
+    mapRecognizer.numberOfTouchesRequired = 2;
+    mapRecognizer.numberOfTapsRequired = 2;
+    [self.view addGestureRecognizer:mapRecognizer];
 
 
 }
@@ -80,6 +86,11 @@
     renderer->viewTranslateZ = 0.0f;
     renderer->viewTranslateX = 0.0f;
     renderer->viewRotateY = 0.0f;
+}
+
+- (void)doubleTapForMap:(UITapGestureRecognizer *)sender
+{
+    renderer->enableMap = !renderer->enableMap;
 }
 
 @end

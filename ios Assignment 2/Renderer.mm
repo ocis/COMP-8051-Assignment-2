@@ -48,10 +48,10 @@ enum
 //===========================================================================
 //  Class interface
 @interface Renderer () {
-
+    
     // iOS hooks
     GLKView *theView;
-
+    
     
     // GL ES variables
     GLESRenderer glesRenderer;
@@ -68,10 +68,14 @@ enum
     GLuint _vertexBuffers[3];
     GLuint _indexBuffer;
     
-    // GLES buffer IDs for leftWallExists
+    // GLES buffer IDs for Walls
     GLuint _vertexArrayForWalls;
     GLuint _indexBufferforWalls;
-
+    
+    // GLES buffer IDs for Marker
+    GLuint _vertexArrayForMarker;
+    GLuint _indexBufferforMarker;
+    
     // Transformation matrices
     GLKMatrix4 _modelViewProjectionMatrix;
     GLKMatrix3 _normalMatrix;
@@ -85,22 +89,22 @@ enum
     float shininess;
     GLKVector4 specularComponent;
     GLKVector4 ambientComponent;
-
+    
     
     // Model
     float *vertices, *normals, *texCoords;
-    GLuint *indices, numIndices, numWallIndices;
-
+    GLuint *indices, numIndices, numWallIndices, numMarkerIndices;
+    
     
     // Misc UI variables
     std::chrono::time_point<std::chrono::steady_clock> lastTime;
-    
+    float minimapScale;
     // Maze
     Maze maze;
     int mazeSize;
     float floorDistance;
     float mazeDistance;
-
+    
     bool mazeDrawn;
 }
 
@@ -127,7 +131,7 @@ enum
     if (!view.context) {
         NSLog(@"Failed to create ES context");
     }
-
+    
     // Set up context
     view.drawableDepthFormat = GLKViewDrawableDepthFormat24;
     theView = view;
@@ -137,7 +141,7 @@ enum
     if (![self setupShaders])
         return;
     
-
+    
     
     // Initialize UI element variables
     rotAngle = 0.0f;
@@ -145,7 +149,7 @@ enum
     
     // Initialize distances
     floorDistance = 0.4999f;
-    mazeDistance = -2;
+    mazeDistance = 0;
     mazeDrawn = false;
     
     // Initialize view transformation variables
@@ -162,7 +166,9 @@ enum
     minimapTranslateX = 0.0f;
     minimapTranslateY = 0.0f;
     minimapTranslateZ = 0.0f;
-
+    minimapScale = 1.0f;
+    enableMap = false;
+    
     // Initialize GL color and other parameters
     glClearColor ( 0.0f, 0.0f, 0.0f, 0.0f );
     glEnable(GL_DEPTH_TEST);
@@ -191,7 +197,7 @@ enum
     
     // Link shader program
     _program = glesRenderer.LinkProgram(_program);
-
+    
     // Get uniform locations.
     uniforms[UNIFORM_MODELVIEWPROJECTION_MATRIX] = glGetUniformLocation(_program, "modelViewProjectionMatrix");
     uniforms[UNIFORM_NORMAL_MATRIX] = glGetUniformLocation(_program, "normalMatrix");
@@ -204,7 +210,7 @@ enum
     uniforms[UNIFORM_AMBIENT_COMPONENT] = glGetUniformLocation(_program, "ambientComponent");
     uniforms[UNIFORM_DIFFUSE_COMPONENT] = glGetUniformLocation(_program, "diffuseComponent");
     uniforms[UNIFORM_SPECULAR_COMPONENT] = glGetUniformLocation(_program, "specularComponent");
-
+    
     // Set up lighting parameters
     // ### Set default lighting parameter values here...
     flashlightPosition = GLKVector3Make(0.0, 0.0, 1.0);
@@ -213,28 +219,28 @@ enum
     shininess = 200.0;
     specularComponent = GLKVector4Make(1.0, 1.0, 1.0, 1.0);
     ambientComponent = GLKVector4Make(0.2, 0.2, 0.2, 1.0);
-
+    
     return true;
 }
 
 
 //=======================
-// Load model(s)
+// Loads cube model
 //=======================
 - (void)loadModels
 {
     // Create VAOs
     glGenVertexArrays(1, &_vertexArray);
     glBindVertexArray(_vertexArray);
-
+    
     // Create VBOs
     glGenBuffers(NUM_ATTRIBUTES, _vertexBuffers);   // One buffer for each attribute
     glGenBuffers(1, &_indexBuffer);                 // Index buffer
-
+    
     // Generate vertex attribute values from model
     int numVerts;
     numIndices = glesRenderer.GenCube(1.0f, &vertices, &normals, &texCoords, &indices, &numVerts);
-
+    
     // Set up VBOs...
     
     // Position
@@ -262,27 +268,28 @@ enum
     
     // Reset VAO
     glBindVertexArray(0);
-
+    
     // Load texture to apply and set up texture in GL
     crateTexture = [self setupTexture:@"crate.jpg"];
 }
 
-// Load wall model
+//=======================
+// Loads wall tile model
 //=======================
 - (void)loadWallModel
 {
     // Create VAOs
     glGenVertexArrays(1, &_vertexArrayForWalls);
     glBindVertexArray(_vertexArrayForWalls);
-
+    
     // Create VBOs
     glGenBuffers(NUM_ATTRIBUTES, _vertexBuffers);   // One buffer for each attribute
     glGenBuffers(1, &_indexBufferforWalls);                 // Index buffer
-
+    
     // Generate vertex attribute values from model
     int numVerts;
     numWallIndices = glesRenderer.GenWall(1.0f, &vertices, &normals, &texCoords, &indices, &numVerts);
-
+    
     // Set up VBOs...
     
     // Position
@@ -310,17 +317,64 @@ enum
     
     // Reset VAO
     glBindVertexArray(0);
-
+    
     // Load texture to apply and set up texture in GL
     leftWallTexture = [self setupTexture:@"brickTexture.jpg"];
     rightWallTexture = [self setupTexture:@"drywallTexture.jpg"];
     bothWallsTexture = [self setupTexture:@"greywallTexture.jpg"];
     noWallsTexture = [self setupTexture:@"stonewallTexture.jpg"];
     floorTexture = [self setupTexture:@"grassTexture.jpg"];
-
+    
 }
 
-
+//=======================
+// Loads minimap marker for player model
+//=======================
+- (void)loadMarkerModel
+{
+    // Create VAOs
+    glGenVertexArrays(1, &_vertexArrayForMarker);
+    glBindVertexArray(_vertexArrayForMarker);
+    
+    // Create VBOs
+    glGenBuffers(NUM_ATTRIBUTES, _vertexBuffers);   // One buffer for each attribute
+    glGenBuffers(1, &_indexBufferforMarker);                 // Index buffer
+    
+    // Generate vertex attribute values from model
+    int numVerts;
+    numMarkerIndices = glesRenderer.GenMarker(1.0f, &vertices, &normals, &texCoords, &indices, &numVerts);
+    
+    // Set up VBOs...
+    
+    // Position
+    glBindBuffer(GL_ARRAY_BUFFER, _vertexBuffers[0]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat)*3*numVerts, vertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(ATTRIB_POSITION);
+    glVertexAttribPointer(ATTRIB_POSITION, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), BUFFER_OFFSET(0));
+    
+    // Normal vector
+    glBindBuffer(GL_ARRAY_BUFFER, _vertexBuffers[1]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat)*3*numVerts, normals, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(ATTRIB_NORMAL);
+    glVertexAttribPointer(ATTRIB_NORMAL, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), BUFFER_OFFSET(0));
+    
+    // Texture coordinate
+    glBindBuffer(GL_ARRAY_BUFFER, _vertexBuffers[2]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat)*3*numVerts, texCoords, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(ATTRIB_TEXTURE_COORDINATE);
+    glVertexAttribPointer(ATTRIB_TEXTURE_COORDINATE, 2, GL_FLOAT, GL_FALSE, 2*sizeof(float), BUFFER_OFFSET(0));
+    
+    
+    // Set up index buffer
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforMarker);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int)*numMarkerIndices, indices, GL_STATIC_DRAW);
+    
+    // Reset VAO
+    glBindVertexArray(0);
+    
+    // Load texture to apply and set up texture in GL
+    
+}
 //=======================
 // Load in and set up texture image (adapted from Ray Wenderlich)
 //=======================
@@ -364,27 +418,27 @@ enum
     glDeleteBuffers(3, _vertexBuffers);
     glDeleteBuffers(1, &_indexBuffer);
     glDeleteVertexArrays(1, &_vertexArray);
-     
-     // Delete vertices buffers
-     if (vertices)
-         free(vertices);
-     if (indices)
-         free(indices);
-     if (normals)
-         free(normals);
-     if (texCoords)
-         free(texCoords);
-     
-     // Delete shader program
-     if (_program) {
-         glDeleteProgram(_program);
-         _program = 0;
-     }
+    
+    // Delete vertices buffers
+    if (vertices)
+        free(vertices);
+    if (indices)
+        free(indices);
+    if (normals)
+        free(normals);
+    if (texCoords)
+        free(texCoords);
+    
+    // Delete shader program
+    if (_program) {
+        glDeleteProgram(_program);
+        _program = 0;
+    }
 }
 
 
 //=======================
-// Update each frame
+// Update each frame (updates the rotation of the cube)
 //=======================
 - (void)update
 {
@@ -392,7 +446,7 @@ enum
     auto currentTime = std::chrono::steady_clock::now();
     auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastTime).count();
     lastTime = currentTime;
-
+    
     // Do UI tasks
     if (isRotating)
     {
@@ -400,7 +454,7 @@ enum
         if (rotAngle >= 360.0f)
             rotAngle = 0.0f;
     }
-
+    
     // Set up base model view matrix (place camera)
     GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(1.1f, 0.0f + viewTranslateY, mazeDistance);
     
@@ -408,11 +462,11 @@ enum
     modelMatrix = GLKMatrix4Rotate(modelMatrix, yRot, 0.0f, 1.0f, 0.0f);
     modelMatrix = GLKMatrix4Rotate(modelMatrix, rotAngle, 0.0f, 1.0f, 0.0f);
     
-     // Set up model view matrix (place model in world)
+    // Set up model view matrix (place model in world)
     GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
     GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
     viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
-
+    
     _modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
     
     // Calculate normal matrix
@@ -421,7 +475,7 @@ enum
     // Calculate projection matrix
     float aspect = fabsf(theView.bounds.size.width / theView.bounds.size.height);
     GLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(65.0f), aspect, 0.1f, 100.0f);
-
+    
     // Calculate model-view-projection matrix
     _modelViewProjectionMatrix = GLKMatrix4Multiply(projectionMatrix, _modelViewMatrix);
 }
@@ -436,7 +490,7 @@ enum
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
-    // BELOW IS ALL FOR DRAWING OBJECTS ==================================
+    // BELOW IS FOR DRAWING CUBE ==================================
     // Select VAO and shaders
     glBindVertexArray(_vertexArray);
     glUseProgram(_program);
@@ -458,137 +512,361 @@ enum
     glUniform1f(uniforms[UNIFORM_SHININESS], shininess);
     glUniform4fv(uniforms[UNIFORM_SPECULAR_COMPONENT], 1, specularComponent.v);
     glUniform4fv(uniforms[UNIFORM_AMBIENT_COMPONENT], 1, ambientComponent.v);
-
+    
     // Select VBO and draw
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBuffer);
     glDrawElements(GL_TRIANGLES, numIndices, GL_UNSIGNED_INT, 0);
-    // ABOVE IS DRAWING A SINGLE OBJECT ==================================
+    // ABOVE IS DRAWING A SINGLE CUBE ==================================
     
-    //DRAWING A SINGLE WALL ======================
-//    glBindVertexArray(_vertexArrayForWalls);
-//    glUseProgram(_program);
-//
-//    // Apply texture to next drawn object
-//    glActiveTexture(GL_TEXTURE0);
-//    glBindTexture(GL_TEXTURE_2D, bothWallsTexture);
-//    glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-//
-//     // Set up base model view matrix (place camera)
-//     GLKMatrix4 baseModelViewMatrix = GLKMatrix4MakeTranslation(0.0f, 0.0f, -4.0f);
-//     baseModelViewMatrix = GLKMatrix4Rotate(baseModelViewMatrix, 0.0f, 0.0f, 1.0f, 0.0f);
-//
-//     // Set up model view matrix (place model in world)
-//     GLKMatrix4 modelViewMatrix = GLKMatrix4Identity;
-//
-//     modelViewMatrix = GLKMatrix4Multiply(baseModelViewMatrix, modelViewMatrix);
-//
-//     // Calculate normal matrix
-//     GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
-//
-//     // Calculate projection matrix
-//     float aspect = fabsf(theView.bounds.size.width / theView.bounds.size.height);
-//     GLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(65.0f), aspect, 0.1f, 100.0f);
-//
-//     // Calculate model-view-projection matrix
-//     GLKMatrix4 modelViewProjectionMatrix = GLKMatrix4Multiply(projectionMatrix, modelViewMatrix);
-//    [self setUniforms:modelViewProjectionMatrix normalMatrix:normalMatrix modelViewMatrix:modelViewMatrix];
-//
-//    // Select VBO and draw
-//    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
-//    glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
-    //============================================
     
     if(!mazeDrawn){
         [self initMaze];
         mazeDrawn = true;
     }
-
-    // Stepping through and drawing the maze walls ====================
+    //=======================
+    // BELOW STEPS THROUGH THE MAZE AND GENERATES THE WALL AND FLOOR TILES
+    //=======================
+    // Select vertex array for wall model and loads it into gpu
     glBindVertexArray(_vertexArrayForWalls);
     glUseProgram(_program);
-        int i = maze.rows;
-        int j = maze.cols;
-       for(i = 0; i < maze.rows; i++){
-           for(j = 0; j < maze.cols; j++){
-               MazeCell cell = maze.GetCell(i, j);
-               // For north wall ============
-               //=============================
-               if(cell.northWallPresent){
-                   if(cell.eastWallPresent){
-                       if(cell.westWallPresent){
-                           glActiveTexture(GL_TEXTURE0);
-                           glBindTexture(GL_TEXTURE_2D, bothWallsTexture);
-                           glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                       } else{
-                           glActiveTexture(GL_TEXTURE0);
-                           glBindTexture(GL_TEXTURE_2D, leftWallTexture);
-                           glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                       }
-                   } else if(cell.westWallPresent){
-                       glActiveTexture(GL_TEXTURE0);
-                       glBindTexture(GL_TEXTURE_2D, rightWallTexture);
-                       glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                   } else{
-                       glActiveTexture(GL_TEXTURE0);
-                       glBindTexture(GL_TEXTURE_2D, noWallsTexture);
-                       glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                   }
-                    // Set up base model view matrix (place camera)
+    
+    int i = maze.rows;
+    int j = maze.cols;
+    
+    //Step through and generation of maze tiles below
+    //=================================================
+    for(i = 0; i < maze.rows; i++){
+        for(j = 0; j < maze.cols; j++){
+            MazeCell cell = maze.GetCell(i, j);
+            // For north wall ============
+            //=============================
+            if(cell.northWallPresent){
+                if(cell.eastWallPresent){
+                    if(cell.westWallPresent){
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, bothWallsTexture);
+                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                    } else{
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, leftWallTexture);
+                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                    }
+                } else if(cell.westWallPresent){
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, rightWallTexture);
+                    glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                } else{
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, noWallsTexture);
+                    glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                }
+                // Set upmodel matrix (place wall in world)
+                GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j, 0.0f, -i + mazeDistance + floorDistance);
+                
+                // Set up view matrix (place camera position)
+                GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
+                GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
+                viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
+                
+                GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
+                
+                // Calculate normal matrix
+                GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
+                
+                // Calculate projection matrix
+                float aspect = fabsf(theView.bounds.size.width / theView.bounds.size.height);
+                GLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(65.0f), aspect, 0.1f, 100.0f);
+                
+                // Calculate model-view-projection matrix
+                GLKMatrix4 modelViewProjectionMatrix = GLKMatrix4Multiply(projectionMatrix, modelViewMatrix);
+                [self setUniforms:modelViewProjectionMatrix normalMatrix:normalMatrix modelViewMatrix:modelViewMatrix];
+                
+                // Select VBO and draw
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
+                glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
+            }
+            // For east wall ============
+            //===========================
+            if(cell.eastWallPresent){
+                if(cell.southWallPresent){
+                    if(cell.northWallPresent){
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, bothWallsTexture);
+                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                    } else{
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, leftWallTexture);
+                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                    }
+                } else if(cell.northWallPresent){
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, rightWallTexture);
+                    glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                } else{
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, noWallsTexture);
+                    glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                }
+                // Set up base model matrix
+                GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j - floorDistance, 0.0f, -i + mazeDistance);
+                modelMatrix = GLKMatrix4Rotate(modelMatrix, M_PI_2, 0.0f, 1.0f, 0.0f);
+                
+                // Set up model view matrix
+                GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
+                GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
+                viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
+                
+                GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
+                
+                // Calculate normal matrix
+                GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
+                
+                // Calculate projection matrix
+                float aspect = fabsf(theView.bounds.size.width / theView.bounds.size.height);
+                GLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(65.0f), aspect, 0.1f, 100.0f);
+                
+                // Calculate model-view-projection matrix
+                GLKMatrix4 modelViewProjectionMatrix = GLKMatrix4Multiply(projectionMatrix, modelViewMatrix);
+                [self setUniforms:modelViewProjectionMatrix normalMatrix:normalMatrix modelViewMatrix:modelViewMatrix];
+                
+                // Select VBO and draw
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
+                glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
+            }
+            // For west wall ============
+            //===============================
+            if(cell.westWallPresent){
+                if(cell.northWallPresent){
+                    if(cell.southWallPresent){
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, bothWallsTexture);
+                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                    } else{
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, leftWallTexture);
+                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                    }
+                } else if(cell.southWallPresent){
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, rightWallTexture);
+                    glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                } else{
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, noWallsTexture);
+                    glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                }
+                // Set up base model matrix
+                GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j + floorDistance, 0.0f, -i + mazeDistance);
+                modelMatrix = GLKMatrix4Rotate(modelMatrix, M_PI_2, 0.0f, 1.0f, 0.0f);
+                
+                // Set up model view matrix
+                GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
+                GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
+                viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
+                
+                GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
+                
+                // Calculate normal matrix
+                GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
+                
+                // Calculate projection matrix
+                float aspect = fabsf(theView.bounds.size.width / theView.bounds.size.height);
+                GLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(65.0f), aspect, 0.1f, 100.0f);
+                
+                // Calculate model-view-projection matrix
+                GLKMatrix4 modelViewProjectionMatrix = GLKMatrix4Multiply(projectionMatrix, modelViewMatrix);
+                [self setUniforms:modelViewProjectionMatrix normalMatrix:normalMatrix modelViewMatrix:modelViewMatrix];
+                
+                // Select VBO and draw
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
+                glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
+            }
+            // For south wall ============
+            //=============================
+            if(cell.southWallPresent){
+                if(cell.westWallPresent){
+                    if(cell.eastWallPresent){
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, bothWallsTexture);
+                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                    } else{
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, leftWallTexture);
+                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                    }
+                } else if(cell.eastWallPresent){
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, rightWallTexture);
+                    glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                } else{
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, noWallsTexture);
+                    glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                }
+                // Set up base model matrix
+                GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j, 0.0f, -i + mazeDistance - floorDistance);
+                
+                // Set up view matrix
+                GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
+                GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
+                viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
+                
+                GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
+                
+                // Calculate normal matrix
+                GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
+                
+                // Calculate projection matrix
+                float aspect = fabsf(theView.bounds.size.width / theView.bounds.size.height);
+                GLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(65.0f), aspect, 0.1f, 100.0f);
+                
+                // Calculate model-view-projection matrix
+                GLKMatrix4 modelViewProjectionMatrix = GLKMatrix4Multiply(projectionMatrix, modelViewMatrix);
+                [self setUniforms:modelViewProjectionMatrix normalMatrix:normalMatrix modelViewMatrix:modelViewMatrix];
+                
+                // Select VBO and draw
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
+                glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
+            }
+            //=====Drawing floor tile===================
+            //==========================================
+            
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, floorTexture);
+            glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+            
+            // Set up model matrix
+            GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j, -floorDistance, -i + mazeDistance);
+            modelMatrix = GLKMatrix4Rotate(modelMatrix, M_PI_2, 1.0f, 0.0f, 0.0f);
+            
+            // Set up view matrix
+            GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
+            GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
+            viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
+            
+            GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
+            
+            // Calculate normal matrix
+            GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
+            
+            // Calculate projection matrix
+            float aspect = fabsf(theView.bounds.size.width / theView.bounds.size.height);
+            GLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(65.0f), aspect, 0.1f, 100.0f);
+            
+            // Calculate model-view-projection matrix
+            GLKMatrix4 modelViewProjectionMatrix = GLKMatrix4Multiply(projectionMatrix, modelViewMatrix);
+            [self setUniforms:modelViewProjectionMatrix normalMatrix:normalMatrix modelViewMatrix:modelViewMatrix];
+            
+            // Select VBO and draw
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
+            glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
+        }
+    }
+    //==========ABOVE IS FOR DRAWING THE MAZE IN THE WORLD==========
+    
+    
+    //====DRAWING MINIMAP============================================
+    // BASICALLY THE SAME AS DRAWING THE MAZE IN THE WORLD BUT WITH THE VIEW
+    // MATRIX BEING ADAPTED TO AN OVERHEAD VIEW, AND APPLYING APPROPRIATE TRANSFORMATIONS
+    // TO THE MINIMAP MARKER OBJECT, WHICH GETS GENERATED HERE AND NOT ABOVE.
+    // DEPTH CHECK IS DISABLED FOR MINIMAP DRAWING OTHERWISE WEIRD CRAP HAPPENS
+    // BLENDING IS ENABLED SO THAT ALPHA IN THE SHADER IS USED WHICH ALLOWS FOR TRANSPARENCY
+    //============================================================================
+    if(enableMap){
+        glDepthFunc(GL_FALSE);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        
+        // Stepping through and drawing the maze walls ====================
+        glBindVertexArray(_vertexArrayForWalls);
+        glUseProgram(_program);
+        
+        for(i = 0; i < maze.rows; i++){
+            for(j = 0; j < maze.cols; j++){
+                MazeCell cell = maze.GetCell(i, j);
+                // For north wall ============
+                //=============================
+                if(cell.northWallPresent){
+                    if(cell.eastWallPresent){
+                        if(cell.westWallPresent){
+                            glActiveTexture(GL_TEXTURE0);
+                            glBindTexture(GL_TEXTURE_2D, bothWallsTexture);
+                            glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                        } else{
+                            glActiveTexture(GL_TEXTURE0);
+                            glBindTexture(GL_TEXTURE_2D, leftWallTexture);
+                            glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                        }
+                    } else if(cell.westWallPresent){
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, rightWallTexture);
+                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                    } else{
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, noWallsTexture);
+                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                    }
                     GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j, 0.0f, -i + mazeDistance + floorDistance);
+                    GLKMatrix4 scaleMatrix = GLKMatrix4Scale(GLKMatrix4Identity, minimapScale, minimapScale, minimapScale);
                     
-                     // Set up model view matrix (place model in world)
-                    GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
-                    GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
+                    modelMatrix = GLKMatrix4Multiply(scaleMatrix, modelMatrix);
+                    
+                    GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(minimapTranslateX, minimapTranslateY,minimapTranslateZ);
+                    GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, minimapViewRotateX, 1.0f, 0.0f, 0.0f);
                     viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
-
-                   GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
-                   
+                    
+                    GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
+                    
                     // Calculate normal matrix
                     GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
                     
                     // Calculate projection matrix
                     float aspect = fabsf(theView.bounds.size.width / theView.bounds.size.height);
                     GLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(65.0f), aspect, 0.1f, 100.0f);
-
+                    
                     // Calculate model-view-projection matrix
                     GLKMatrix4 modelViewProjectionMatrix = GLKMatrix4Multiply(projectionMatrix, modelViewMatrix);
-                   [self setUniforms:modelViewProjectionMatrix normalMatrix:normalMatrix modelViewMatrix:modelViewMatrix];
-
-                   // Select VBO and draw
-                   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
-                   glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
-               }
-               // For east wall ============
-               //===========================
-               if(cell.eastWallPresent){
-                   if(cell.southWallPresent){
-                       if(cell.northWallPresent){
-                           glActiveTexture(GL_TEXTURE0);
-                           glBindTexture(GL_TEXTURE_2D, bothWallsTexture);
-                           glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                       } else{
-                           glActiveTexture(GL_TEXTURE0);
-                           glBindTexture(GL_TEXTURE_2D, leftWallTexture);
-                           glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                       }
-                   } else if(cell.northWallPresent){
-                       glActiveTexture(GL_TEXTURE0);
-                       glBindTexture(GL_TEXTURE_2D, rightWallTexture);
-                       glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                   } else{
-                       glActiveTexture(GL_TEXTURE0);
-                       glBindTexture(GL_TEXTURE_2D, noWallsTexture);
-                       glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                   }
-                    // Set up base model view matrix (place camera)
+                    [self setUniforms:modelViewProjectionMatrix normalMatrix:normalMatrix modelViewMatrix:modelViewMatrix];
+                    
+                    // Select VBO and draw
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
+                    glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
+                }
+                // For east wall ============
+                //===========================
+                if(cell.eastWallPresent){
+                    if(cell.southWallPresent){
+                        if(cell.northWallPresent){
+                            glActiveTexture(GL_TEXTURE0);
+                            glBindTexture(GL_TEXTURE_2D, bothWallsTexture);
+                            glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                        } else{
+                            glActiveTexture(GL_TEXTURE0);
+                            glBindTexture(GL_TEXTURE_2D, leftWallTexture);
+                            glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                        }
+                    } else if(cell.northWallPresent){
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, rightWallTexture);
+                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                    } else{
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, noWallsTexture);
+                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                    }
+                    
                     GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j - floorDistance, 0.0f, -i + mazeDistance);
                     modelMatrix = GLKMatrix4Rotate(modelMatrix, M_PI_2, 0.0f, 1.0f, 0.0f);
                     
-                      // Set up model view matrix (place model in world)
-                     GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
-                     GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
-                     viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
-
+                    GLKMatrix4 scaleMatrix = GLKMatrix4Scale(GLKMatrix4Identity, minimapScale, minimapScale, minimapScale);
+                    
+                    modelMatrix = GLKMatrix4Multiply(scaleMatrix, modelMatrix);
+                    
+                    GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(minimapTranslateX, minimapTranslateY,minimapTranslateZ);
+                    GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, minimapViewRotateX, 1.0f, 0.0f, 0.0f);
+                    
+                    viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
+                    
                     GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
                     
                     // Calculate normal matrix
@@ -597,65 +875,68 @@ enum
                     // Calculate projection matrix
                     float aspect = fabsf(theView.bounds.size.width / theView.bounds.size.height);
                     GLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(65.0f), aspect, 0.1f, 100.0f);
-
+                    
                     // Calculate model-view-projection matrix
                     GLKMatrix4 modelViewProjectionMatrix = GLKMatrix4Multiply(projectionMatrix, modelViewMatrix);
-                   [self setUniforms:modelViewProjectionMatrix normalMatrix:normalMatrix modelViewMatrix:modelViewMatrix];
-
-                   // Select VBO and draw
-                   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
-                   glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
-               }
-               // For west wall ============
-               //===============================
-               if(cell.westWallPresent){
-                   if(cell.northWallPresent){
-                       if(cell.southWallPresent){
-                           glActiveTexture(GL_TEXTURE0);
-                           glBindTexture(GL_TEXTURE_2D, bothWallsTexture);
-                           glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                       } else{
-                           glActiveTexture(GL_TEXTURE0);
-                           glBindTexture(GL_TEXTURE_2D, leftWallTexture);
-                           glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                       }
-                   } else if(cell.southWallPresent){
-                       glActiveTexture(GL_TEXTURE0);
-                       glBindTexture(GL_TEXTURE_2D, rightWallTexture);
-                       glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                   } else{
-                       glActiveTexture(GL_TEXTURE0);
-                       glBindTexture(GL_TEXTURE_2D, noWallsTexture);
-                       glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                   }
-                    // Set up base model view matrix (place camera)
+                    [self setUniforms:modelViewProjectionMatrix normalMatrix:normalMatrix modelViewMatrix:modelViewMatrix];
+                    
+                    // Select VBO and draw
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
+                    glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
+                }
+                // For west wall ============
+                //===============================
+                if(cell.westWallPresent){
+                    if(cell.northWallPresent){
+                        if(cell.southWallPresent){
+                            glActiveTexture(GL_TEXTURE0);
+                            glBindTexture(GL_TEXTURE_2D, bothWallsTexture);
+                            glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                        } else{
+                            glActiveTexture(GL_TEXTURE0);
+                            glBindTexture(GL_TEXTURE_2D, leftWallTexture);
+                            glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                        }
+                    } else if(cell.southWallPresent){
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, rightWallTexture);
+                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                    } else{
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, noWallsTexture);
+                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                    }
                     GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j + floorDistance, 0.0f, -i + mazeDistance);
                     modelMatrix = GLKMatrix4Rotate(modelMatrix, M_PI_2, 0.0f, 1.0f, 0.0f);
                     
-                      // Set up model view matrix (place model in world)
-                     GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
-                     GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
-                     viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
-
+                    GLKMatrix4 scaleMatrix = GLKMatrix4Scale(GLKMatrix4Identity, minimapScale, minimapScale, minimapScale);
+                    
+                    modelMatrix = GLKMatrix4Multiply(scaleMatrix, modelMatrix);
+                    
+                    GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(minimapTranslateX, minimapTranslateY,minimapTranslateZ);
+                    GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, minimapViewRotateX, 1.0f, 0.0f, 0.0f);
+                    
+                    viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
+                    
                     GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
-                   
+                    
                     // Calculate normal matrix
                     GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
                     
                     // Calculate projection matrix
                     float aspect = fabsf(theView.bounds.size.width / theView.bounds.size.height);
                     GLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(65.0f), aspect, 0.1f, 100.0f);
-
+                    
                     // Calculate model-view-projection matrix
                     GLKMatrix4 modelViewProjectionMatrix = GLKMatrix4Multiply(projectionMatrix, modelViewMatrix);
-                   [self setUniforms:modelViewProjectionMatrix normalMatrix:normalMatrix modelViewMatrix:modelViewMatrix];
-
-                   // Select VBO and draw
-                   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
-                   glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
+                    [self setUniforms:modelViewProjectionMatrix normalMatrix:normalMatrix modelViewMatrix:modelViewMatrix];
+                    
+                    // Select VBO and draw
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
+                    glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
                 }
                 // For south wall ============
-               //=============================
+                //=============================
                 if(cell.southWallPresent){
                     if(cell.westWallPresent){
                         if(cell.eastWallPresent){
@@ -676,66 +957,118 @@ enum
                         glBindTexture(GL_TEXTURE_2D, noWallsTexture);
                         glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
                     }
-                     // Set up base model view matrix (place camera)
-                     GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j, 0.0f, -i + mazeDistance - floorDistance);
-                     
-                       // Set up model view matrix (place model in world)
-                      GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
-                      GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
-                      viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
-
-                     GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
-                     
-                     // Calculate normal matrix
-                     GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
-                     
-                     // Calculate projection matrix
-                     float aspect = fabsf(theView.bounds.size.width / theView.bounds.size.height);
-                     GLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(65.0f), aspect, 0.1f, 100.0f);
-
-                     // Calculate model-view-projection matrix
-                     GLKMatrix4 modelViewProjectionMatrix = GLKMatrix4Multiply(projectionMatrix, modelViewMatrix);
+                    GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j, 0.0f, -i + mazeDistance - floorDistance);
+                    
+                    GLKMatrix4 scaleMatrix = GLKMatrix4Scale(GLKMatrix4Identity, minimapScale, minimapScale, minimapScale);
+                    
+                    modelMatrix = GLKMatrix4Multiply(scaleMatrix, modelMatrix);
+                    
+                    GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(minimapTranslateX, minimapTranslateY,minimapTranslateZ);
+                    GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, minimapViewRotateX, 1.0f, 0.0f, 0.0f);
+                    
+                    viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
+                    
+                    GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
+                    
+                    // Calculate normal matrix
+                    GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
+                    
+                    // Calculate projection matrix
+                    float aspect = fabsf(theView.bounds.size.width / theView.bounds.size.height);
+                    GLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(65.0f), aspect, 0.1f, 100.0f);
+                    
+                    // Calculate model-view-projection matrix
+                    GLKMatrix4 modelViewProjectionMatrix = GLKMatrix4Multiply(projectionMatrix, modelViewMatrix);
                     [self setUniforms:modelViewProjectionMatrix normalMatrix:normalMatrix modelViewMatrix:modelViewMatrix];
-
+                    
                     // Select VBO and draw
                     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
                     glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
                 }
-               //=====Drawing floor tile===================
-               //==========================================
-               
-               glActiveTexture(GL_TEXTURE0);
-               glBindTexture(GL_TEXTURE_2D, floorTexture);
-               glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-               
-                 // Set up base model view matrix (place camera)
-                 GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j, -floorDistance, -i + mazeDistance);
-                 modelMatrix = GLKMatrix4Rotate(modelMatrix, M_PI_2, 1.0f, 0.0f, 0.0f);
-                 
-                   // Set up model view matrix (place model in world)
-                  GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
-                  GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
-                  viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
-
-                 GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
+                //=====Drawing floor tile===================
+                //==========================================
                 
-                 // Calculate normal matrix
-                 GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
-                 
-                 // Calculate projection matrix
-                 float aspect = fabsf(theView.bounds.size.width / theView.bounds.size.height);
-                 GLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(65.0f), aspect, 0.1f, 100.0f);
-
-                 // Calculate model-view-projection matrix
-                 GLKMatrix4 modelViewProjectionMatrix = GLKMatrix4Multiply(projectionMatrix, modelViewMatrix);
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, floorTexture);
+                glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+                
+                // Set up base model view matrix (place camera)
+                GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j, -floorDistance, -i + mazeDistance);
+                modelMatrix = GLKMatrix4Rotate(modelMatrix, M_PI_2, 1.0f, 0.0f, 0.0f);
+                
+                GLKMatrix4 scaleMatrix = GLKMatrix4Scale(GLKMatrix4Identity, minimapScale, minimapScale, minimapScale);
+                
+                modelMatrix = GLKMatrix4Multiply(scaleMatrix, modelMatrix);
+                
+                // Set up model view matrix (place model in world)
+                GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(minimapTranslateX, minimapTranslateY,minimapTranslateZ);
+                GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, minimapViewRotateX, 1.0f, 0.0f, 0.0f);
+                
+                viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
+                
+                GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
+                
+                // Calculate normal matrix
+                GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
+                
+                // Calculate projection matrix
+                float aspect = fabsf(theView.bounds.size.width / theView.bounds.size.height);
+                GLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(65.0f), aspect, 0.1f, 100.0f);
+                
+                // Calculate model-view-projection matrix
+                GLKMatrix4 modelViewProjectionMatrix = GLKMatrix4Multiply(projectionMatrix, modelViewMatrix);
                 [self setUniforms:modelViewProjectionMatrix normalMatrix:normalMatrix modelViewMatrix:modelViewMatrix];
-
+                
                 // Select VBO and draw
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
                 glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
+                
+                
             }
         }
-   // NSLog(@"TranslateX: %f, TranslateZ: %f", viewTranslateX, viewTranslateZ);
+        //============Drawing marker===============
+        //==========================================
+        glBindVertexArray(_vertexArrayForMarker);
+        glUseProgram(_program);
+        
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, rightWallTexture);
+        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
+        
+        GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-viewTranslateX * (2), -floorDistance + minimapScale, -viewTranslateZ * (2) + mazeDistance);
+        modelMatrix = GLKMatrix4Rotate(modelMatrix, M_PI_2, 1.0f, 0.0f, 0.0f);
+        modelMatrix = GLKMatrix4Rotate(modelMatrix, M_PI, 0.0f, 0.0f, 1.0f);
+        modelMatrix = GLKMatrix4Rotate(modelMatrix, -viewRotateY, 0.0f, 0.0f, 1.0f);
+        
+        GLKMatrix4 scaleMatrix = GLKMatrix4Scale(GLKMatrix4Identity, minimapScale / 2, minimapScale / 2, minimapScale / 2);
+        
+        modelMatrix = GLKMatrix4Multiply(scaleMatrix, modelMatrix);
+        
+        GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(minimapTranslateX, minimapTranslateY,minimapTranslateZ);
+        GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, minimapViewRotateX, 1.0f, 0.0f, 0.0f);
+        
+        viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
+        
+        GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
+        
+        // Calculate normal matrix
+        GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
+        
+        // Calculate projection matrix
+        float aspect = fabsf(theView.bounds.size.width / theView.bounds.size.height);
+        GLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(65.0f), aspect, 0.1f, 100.0f);
+        
+        // Calculate model-view-projection matrix
+        GLKMatrix4 modelViewProjectionMatrix = GLKMatrix4Multiply(projectionMatrix, modelViewMatrix);
+        [self setUniforms:modelViewProjectionMatrix normalMatrix:normalMatrix modelViewMatrix:modelViewMatrix];
+        
+        // Select VBO and draw
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
+        glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
+        
+        glDisable(GL_BLEND);
+        glDepthFunc(GL_TRUE);
+    }
 }
 - (void)setUniforms:(GLKMatrix4)_modelViewProjectionMatrix normalMatrix:(GLKMatrix3)_normalMatrix modelViewMatrix:(GLKMatrix4)_modelViewMatrix
 {
@@ -755,13 +1088,14 @@ enum
 
 - (void)initMaze{
     maze.Create();
-
+    
     minimapViewRotateX = M_PI_2;
     minimapViewRotateY = 0.0f;
     minimapViewRotateZ = 0.0f;
-    minimapTranslateX = 0.47f;
-    minimapTranslateY = -4.0f;
-    minimapTranslateZ = -3.0f;
+    minimapTranslateX = 0.01f;
+    minimapTranslateY = -0.1f;
+    minimapTranslateZ = 0.01f;
+    minimapScale = 0.01f;
 }
 
 @end
