@@ -8,6 +8,12 @@
 
 
 @interface Renderer : NSObject
+{
+    @public float viewTranslateX, viewTranslateY, viewTranslateZ;
+    @public float viewRotateX, viewRotateY, viewRotateZ;
+    @public float minimapViewRotateX, minimapViewRotateY, minimapViewRotateZ;
+    @public float minimapTranslateX, minimapTranslateY, minimapTranslateZ;
+}
 
 // Properties to interface with iOS UI code
 @property float rotAngle, xRot, yRot;

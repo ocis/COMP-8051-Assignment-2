@@ -100,10 +100,7 @@ enum
     int mazeSize;
     float floorDistance;
     float mazeDistance;
-    float viewRotateX, viewRotateY, viewRotateZ;
-    float viewTranslateX, viewTranslateY, viewTranslateZ;
-    float minimapViewRotateX, minimapViewRotateY, minimapViewRotateZ;
-    float minimapTranslateX, minimapTranslateY, minimapTranslateZ;
+
     bool mazeDrawn;
 }
 
@@ -148,7 +145,7 @@ enum
     
     // Initialize distances
     floorDistance = 0.4999f;
-    mazeDistance = -4;
+    mazeDistance = -2;
     mazeDrawn = false;
     
     // Initialize view transformation variables
@@ -405,15 +402,18 @@ enum
     }
 
     // Set up base model view matrix (place camera)
-    GLKMatrix4 baseModelViewMatrix = GLKMatrix4MakeTranslation(1.1f + viewTranslateX, 0.0f + viewTranslateY, -4.0f + viewTranslateZ);
-    baseModelViewMatrix = GLKMatrix4Rotate(baseModelViewMatrix, rotAngle + viewRotateY, 0.0f, 1.0f, 0.0f);
+    GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(1.1f, 0.0f + viewTranslateY, mazeDistance);
     
-    // Set up model view matrix (place model in world)
-    _modelViewMatrix = GLKMatrix4Identity;
-    _modelViewMatrix = GLKMatrix4Rotate(_modelViewMatrix, xRot, 1.0f, 0.0f, 0.0f);
-    _modelViewMatrix = GLKMatrix4Rotate(_modelViewMatrix, yRot, 0.0f, 1.0f, 0.0f);
-    _modelViewMatrix = GLKMatrix4Rotate(_modelViewMatrix, rotAngle, 0.0f, 1.0f, 0.0f);
-    _modelViewMatrix = GLKMatrix4Multiply(baseModelViewMatrix, _modelViewMatrix);
+    modelMatrix = GLKMatrix4Rotate(modelMatrix, xRot, 1.0f, 0.0f, 0.0f);
+    modelMatrix = GLKMatrix4Rotate(modelMatrix, yRot, 0.0f, 1.0f, 0.0f);
+    modelMatrix = GLKMatrix4Rotate(modelMatrix, rotAngle, 0.0f, 1.0f, 0.0f);
+    
+     // Set up model view matrix (place model in world)
+    GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
+    GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
+    viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
+
+    _modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
     
     // Calculate normal matrix
     _normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(_modelViewMatrix), NULL);
@@ -519,32 +519,29 @@ enum
                            glActiveTexture(GL_TEXTURE0);
                            glBindTexture(GL_TEXTURE_2D, bothWallsTexture);
                            glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                           NSLog(@"N Bothwalls");
                        } else{
                            glActiveTexture(GL_TEXTURE0);
                            glBindTexture(GL_TEXTURE_2D, leftWallTexture);
                            glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                           NSLog(@"N Leftwall");
                        }
                    } else if(cell.westWallPresent){
                        glActiveTexture(GL_TEXTURE0);
                        glBindTexture(GL_TEXTURE_2D, rightWallTexture);
                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                       NSLog(@"N Rightwall");
                    } else{
                        glActiveTexture(GL_TEXTURE0);
                        glBindTexture(GL_TEXTURE_2D, noWallsTexture);
                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                       NSLog(@"N Nowalls");
                    }
                     // Set up base model view matrix (place camera)
                     GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j, 0.0f, -i + mazeDistance + floorDistance);
                     
-                    // Set up model view matrix (place model in world)
-                    GLKMatrix4 viewMatrix = GLKMatrix4Translate(GLKMatrix4Identity, viewTranslateX, viewTranslateY, viewTranslateZ);
-                    viewMatrix = GLKMatrix4Rotate(viewMatrix, viewRotateY, 0.0f, 1.0f, 0.0f);
+                     // Set up model view matrix (place model in world)
+                    GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
+                    GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
+                    viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
 
-                   GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix,   modelMatrix);
+                   GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
                    
                     // Calculate normal matrix
                     GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
@@ -569,33 +566,30 @@ enum
                            glActiveTexture(GL_TEXTURE0);
                            glBindTexture(GL_TEXTURE_2D, bothWallsTexture);
                            glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                           NSLog(@"E Bothwalls");
                        } else{
                            glActiveTexture(GL_TEXTURE0);
                            glBindTexture(GL_TEXTURE_2D, leftWallTexture);
                            glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                           NSLog(@"E Leftwall");
                        }
                    } else if(cell.northWallPresent){
                        glActiveTexture(GL_TEXTURE0);
                        glBindTexture(GL_TEXTURE_2D, rightWallTexture);
                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                       NSLog(@"E Rightwall");
                    } else{
                        glActiveTexture(GL_TEXTURE0);
                        glBindTexture(GL_TEXTURE_2D, noWallsTexture);
                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                       NSLog(@"E Nowalls");
                    }
                     // Set up base model view matrix (place camera)
                     GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j - floorDistance, 0.0f, -i + mazeDistance);
                     modelMatrix = GLKMatrix4Rotate(modelMatrix, M_PI_2, 0.0f, 1.0f, 0.0f);
                     
-                     // Set up model view matrix (place model in world)
-                     GLKMatrix4 viewMatrix = GLKMatrix4Translate(GLKMatrix4Identity, viewTranslateX, viewTranslateY, viewTranslateZ);
-                    viewMatrix = GLKMatrix4Rotate(viewMatrix, viewRotateY, 0.0f, 1.0f, 0.0f);
+                      // Set up model view matrix (place model in world)
+                     GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
+                     GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
+                     viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
 
-                    GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix,   modelMatrix);
+                    GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
                     
                     // Calculate normal matrix
                     GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
@@ -620,33 +614,30 @@ enum
                            glActiveTexture(GL_TEXTURE0);
                            glBindTexture(GL_TEXTURE_2D, bothWallsTexture);
                            glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                           NSLog(@"W Bothwalls");
                        } else{
                            glActiveTexture(GL_TEXTURE0);
                            glBindTexture(GL_TEXTURE_2D, leftWallTexture);
                            glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                           NSLog(@"W Leftwall");
                        }
                    } else if(cell.southWallPresent){
                        glActiveTexture(GL_TEXTURE0);
                        glBindTexture(GL_TEXTURE_2D, rightWallTexture);
                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                       NSLog(@"W Rightwall");
                    } else{
                        glActiveTexture(GL_TEXTURE0);
                        glBindTexture(GL_TEXTURE_2D, noWallsTexture);
                        glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                       NSLog(@"W Nowalls");
                    }
                     // Set up base model view matrix (place camera)
                     GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j + floorDistance, 0.0f, -i + mazeDistance);
                     modelMatrix = GLKMatrix4Rotate(modelMatrix, M_PI_2, 0.0f, 1.0f, 0.0f);
                     
-                     // Set up model view matrix (place model in world)
-                     GLKMatrix4 viewMatrix = GLKMatrix4Translate(GLKMatrix4Identity, viewTranslateX, viewTranslateY, viewTranslateZ);
-                    viewMatrix = GLKMatrix4Rotate(viewMatrix, viewRotateY, 0.0f, 1.0f, 0.0f);
+                      // Set up model view matrix (place model in world)
+                     GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
+                     GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
+                     viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
 
-                    GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix,   modelMatrix);
+                    GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
                    
                     // Calculate normal matrix
                     GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
@@ -671,32 +662,29 @@ enum
                             glActiveTexture(GL_TEXTURE0);
                             glBindTexture(GL_TEXTURE_2D, bothWallsTexture);
                             glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                            NSLog(@"S Bothwalls");
                         } else{
                             glActiveTexture(GL_TEXTURE0);
                             glBindTexture(GL_TEXTURE_2D, leftWallTexture);
                             glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                            NSLog(@"S Leftwall");
                         }
                     } else if(cell.eastWallPresent){
                         glActiveTexture(GL_TEXTURE0);
                         glBindTexture(GL_TEXTURE_2D, rightWallTexture);
                         glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                        NSLog(@"S Rightwall");
                     } else{
                         glActiveTexture(GL_TEXTURE0);
                         glBindTexture(GL_TEXTURE_2D, noWallsTexture);
                         glUniform1i(uniforms[UNIFORM_TEXTURE], 0);
-                        NSLog(@"S Nowalls");
                     }
                      // Set up base model view matrix (place camera)
                      GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j, 0.0f, -i + mazeDistance - floorDistance);
                      
-                      // Set up model view matrix (place model in world)
-                      GLKMatrix4 viewMatrix = GLKMatrix4Translate(GLKMatrix4Identity, viewTranslateX, viewTranslateY, viewTranslateZ);
-                    viewMatrix = GLKMatrix4Rotate(viewMatrix, viewRotateY, 0.0f, 1.0f, 0.0f);
+                       // Set up model view matrix (place model in world)
+                      GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
+                      GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
+                      viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
 
-                     GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix,   modelMatrix);
+                     GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
                      
                      // Calculate normal matrix
                      GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
@@ -724,11 +712,12 @@ enum
                  GLKMatrix4 modelMatrix = GLKMatrix4MakeTranslation(-j, -floorDistance, -i + mazeDistance);
                  modelMatrix = GLKMatrix4Rotate(modelMatrix, M_PI_2, 1.0f, 0.0f, 0.0f);
                  
-                  // Set up model view matrix (place model in world)
-                  GLKMatrix4 viewMatrix = GLKMatrix4Translate(GLKMatrix4Identity, viewTranslateX, viewTranslateY, viewTranslateZ);
-                 viewMatrix = GLKMatrix4Rotate(viewMatrix, viewRotateY, 0.0f, 1.0f, 0.0f);
+                   // Set up model view matrix (place model in world)
+                  GLKMatrix4 viewMatrix = GLKMatrix4MakeTranslation(viewTranslateX, 0.0f,viewTranslateZ);
+                  GLKMatrix4 rotationMatrix = GLKMatrix4Rotate(GLKMatrix4Identity, -viewRotateY, 0.0f, 1.0f, 0.0f);
+                  viewMatrix = GLKMatrix4Multiply(rotationMatrix, viewMatrix);
 
-                 GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix,   modelMatrix);
+                 GLKMatrix4 modelViewMatrix = GLKMatrix4Multiply(viewMatrix, modelMatrix);
                 
                  // Calculate normal matrix
                  GLKMatrix3 normalMatrix = GLKMatrix3InvertAndTranspose(GLKMatrix4GetMatrix3(modelViewMatrix), NULL);
@@ -744,12 +733,9 @@ enum
                 // Select VBO and draw
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _indexBufferforWalls);
                 glDrawElements(GL_TRIANGLES, numWallIndices, GL_UNSIGNED_INT, 0);
-               
-               NSLog(@"Cell %i,%i", i, j);
-               
             }
-           NSLog(@"Hello");
         }
+   // NSLog(@"TranslateX: %f, TranslateZ: %f", viewTranslateX, viewTranslateZ);
 }
 - (void)setUniforms:(GLKMatrix4)_modelViewProjectionMatrix normalMatrix:(GLKMatrix3)_normalMatrix modelViewMatrix:(GLKMatrix4)_modelViewMatrix
 {

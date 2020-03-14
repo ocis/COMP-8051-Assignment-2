@@ -32,7 +32,7 @@ class Maze
 
     public:
         int rows, cols;                        // size of maze
-        Maze(int rows = 2, int cols = 2);    // default size is 4x4 maze
+        Maze(int rows = 3, int cols = 3);    // default size is 4x4 maze
         ~Maze();
         MazeCell GetCell(int r, int c);
 
